@@ -311,6 +311,11 @@ button { font-family: var(--sans); }
   font-size: 14.5px; color: var(--blue-deep);
 }
 .rainbox b { display: block; font-size: 13px; letter-spacing: 1px; margin-bottom: 2px; }
+.notebox {
+  background: #F6EDD4; border-radius: 14px; padding: 13px 15px; margin: 4px 0 12px;
+  font-size: 14.5px; color: var(--gold-deep); line-height: 1.7;
+}
+.notebox b { display: block; font-size: 13px; letter-spacing: 1px; margin-bottom: 3px; color: #6b4f0f; }
 
 /* ---------- orders ---------- */
 .flight-card .fc-route { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-size: 21px; font-weight: 600; }

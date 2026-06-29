@@ -295,6 +295,7 @@ function renderPlan() {
     </div>
     <img class="dayimg" src="assets/img/${day.img}" alt="" onerror="this.remove()">
     ${hotel ? hotelBlockHTML(hotel, { flat: true }) : ""}
+    ${day.note ? `<div class="notebox"><b>提醒事項</b>${esc(day.note)}</div>` : ""}
     <div class="rainbox"><b>如果下雨就去這裡</b>${esc(day.rain)}</div>
     <div class="timeline">${events}</div>
     <div class="swipe-hint">← 左右滑動切換天數 →</div>`;
