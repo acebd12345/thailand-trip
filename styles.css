@@ -472,6 +472,50 @@ button { font-family: var(--sans); }
 .exp-form input[type="number"] { flex: 1; }
 .exp-form input:focus { outline: 2px solid var(--gold); border-color: transparent; }
 
+/* ---------- 吃飯 · 找最近推薦 ---------- */
+.food-cta { background: var(--green-soft); border-color: #CFE3CF; }
+.food-cta .cta-ic { color: var(--green); }
+.food-cta .cta-go { color: var(--green); }
+
+#foodsheet {
+  position: fixed; inset: 0; z-index: 150;
+  background: rgba(59, 47, 35, .35);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+#foodsheet[hidden] { display: none !important; }
+.fs-panel {
+  width: 100%; max-width: 560px; height: 92dvh;
+  background: var(--paper); border-radius: 20px 20px 0 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.fs-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 8px; }
+.fs-title { font-family: var(--serif); font-size: 20px; font-weight: 600; }
+.fs-close {
+  width: 36px; height: 36px; border-radius: 99px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink-soft); font-size: 16px; cursor: pointer;
+}
+.fs-note { margin: 0 16px 8px; background: #F6EDD4; color: var(--gold-deep); border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
+.fs-center { margin: 0 16px 8px; font-size: 13px; color: var(--ink-soft); }
+.fs-center b { color: var(--green); }
+.fs-chips {
+  display: flex; gap: 8px; overflow-x: auto; padding: 0 16px 10px; flex: 0 0 auto;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.fs-chips::-webkit-scrollbar { display: none; }
+.chip.on { background: var(--green); border-color: var(--green); color: #fff; }
+.fs-seg { margin: 0 16px 10px; }
+.fs-list { flex: 1; overflow-y: auto; padding: 0 16px calc(28px + env(safe-area-inset-bottom)); }
+.fcard { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 13px 14px; margin-bottom: 10px; }
+.fc-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.fc-name { font-weight: 700; font-size: 16px; min-width: 0; }
+.fc-dist { color: var(--orange); font-weight: 700; font-size: 12.5px; white-space: nowrap; flex: 0 0 auto; }
+.fc-type { margin-top: 5px; }
+.fc-dishes { font-size: 13.5px; margin-top: 7px; background: var(--paper); border-radius: 9px; padding: 7px 10px; line-height: 1.6; }
+.fc-dishes b { color: var(--red); margin-right: 6px; font-size: 12px; }
+.fc-addr { font-size: 12px; color: var(--ink-faint); margin-top: 6px; }
+.fcard .btnrow { margin-top: 9px; }
+.fcard .abtn { font-size: 13.5px; padding: 8px 2px; }
+
 /* ---------- tabbar ---------- */
 #tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;

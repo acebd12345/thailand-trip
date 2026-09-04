@@ -39,7 +39,8 @@ const QI = {
   check: SVG('<path d="M9 6h12M9 12h12M9 18h12"/><path d="M3.5 6l1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2"/>'),
   chat: SVG('<path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.1A8.5 8.5 0 1 1 21 11.5z"/>'),
   bed: SVG('<path d="M3 7v11M3 12h18v6M21 18v-4a3 3 0 0 0-3-3h-7v4"/><circle cx="7" cy="10" r="1.5"/>'),
-  pin: SVG('<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/>')
+  pin: SVG('<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/>'),
+  food: SVG('<path d="M6 2v6a2 2 0 0 0 4 0V2"/><path d="M8 10v12"/><path d="M17 2a5 5 0 0 0-2 4v5h3v11"/>')
 };
 
 let toastTimer;
@@ -167,6 +168,11 @@ function renderHome() {
         ${undone.length ? `<div class="prep-next">${undone.map(it => `<div class="pn-item">${esc(it.text)}</div>`).join("")}</div>` : `<div class="prep-done">全部準備完成，可以出發了</div>`}
         <button class="btn-green" onclick="go('list',0)">查看完整清單</button>
       </div>
+      <button class="cta-strip food-cta" onclick="openFood()">
+        <div class="cta-ic">${QI.food}</div>
+        <div class="cta-body"><b>吃飯 · 找最近推薦</b><span>72 間口袋美食，依距離由近到遠</span></div>
+        <span class="cta-go">開找 ›</span>
+      </button>
       <div class="twocards">
         ${flightCardMini(DATA.flights[0])}
         ${hotelCardMini(DATA.hotels[0], false)}
@@ -208,6 +214,11 @@ function renderHome() {
           <div class="tc-next">今天行程跑完了，好好休息</div>
           <div class="tc-actions"><button class="abtn primary" onclick="go('plan',${di})">看今天完整行程</button></div>`}
       </div>
+      <button class="cta-strip food-cta" onclick="openFood()">
+        <div class="cta-ic">${QI.food}</div>
+        <div class="cta-body"><b>吃飯 · 找最近推薦</b><span>72 間口袋美食，依距離由近到遠</span></div>
+        <span class="cta-go">開找 ›</span>
+      </button>
       ${hotel ? hotelBlockHTML(hotel, {}) : ""}
       <div class="rain-strip"><b>今日雨備</b>${esc(day.rain)}</div>
       ${flightCardMini(nextFlight())}
@@ -585,6 +596,128 @@ window.convThb = v => {
   $("#conv-out").textContent = n > 0 ? "≈ TWD " + Math.round(n * DATA.money.rate).toLocaleString() : "≈ TWD —";
 };
 
+/* ===== 吃飯 · 找最近推薦 ===== */
+let foodState = { center: null, centerIdx: null, city: "all", note: "" };
+let foodList = [];
+
+function haversineM(lat1, lng1, lat2, lng2) {
+  const R = 6371000, toR = d => d * Math.PI / 180;
+  const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toR(lat1)) * Math.cos(toR(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+function fmtDist(m) {
+  if (m < 1000) return Math.round(m) + "m · 步行約 " + Math.max(1, Math.ceil(m / 75)) + " 分";
+  const km = m / 1000;
+  return (km < 10 ? km.toFixed(1) : Math.round(km)) + "km · 車程約 " + Math.max(2, Math.ceil(km / 20 * 60)) + " 分";
+}
+const inThailand = (lat, lng) => lat > 5.5 && lat < 20.6 && lng > 97.2 && lng < 105.8;
+
+function defaultFoodCenterIdx() {
+  const { date } = bkkNow();
+  const day = DATA.days.find(d => d.date === date);
+  return (day && day.cityClass === "bkk") ? 3 : 0; // 曼谷日→Wyndham，其餘→清邁飯店
+}
+
+window.openFood = function () {
+  let sheet = document.getElementById("foodsheet");
+  if (!sheet) {
+    sheet = document.createElement("div");
+    sheet.id = "foodsheet";
+    document.body.appendChild(sheet);
+    sheet.addEventListener("click", e => {
+      const cp = e.target.closest("[data-copyaddr]");
+      if (cp) { copyText(foodList[+cp.dataset.copyaddr].addr, "地址已複製，貼到 Grab／Bolt 就能叫車"); return; }
+      if (e.target === sheet) closeFood();
+    });
+  }
+  sheet.hidden = false;
+  document.body.style.overflow = "hidden";
+  if (foodState.centerIdx === null) {
+    setFoodCenterIdx(defaultFoodCenterIdx(), true);
+    tryLocateFood();
+  }
+  renderFood();
+};
+window.closeFood = function () {
+  const s = document.getElementById("foodsheet");
+  if (s) s.hidden = true;
+  document.body.style.overflow = "";
+};
+function tryLocateFood() {
+  if (!("geolocation" in navigator)) { foodState.note = "此裝置不支援定位，已切換為參考地點"; renderFood(); return; }
+  foodState.note = "定位中…（拒絕或逾時會自動用參考地點）";
+  renderFood();
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    if (inThailand(lat, lng)) {
+      foodState.center = { label: "目前位置", lat, lng };
+      foodState.centerIdx = -2;
+      foodState.city = lat > 16 ? "cm" : "bkk";
+      foodState.note = "";
+    } else {
+      foodState.note = "目前未定位於泰國，已為你切換為參考地點";
+    }
+    renderFood();
+  }, () => {
+    foodState.note = "未取得定位權限，已為你切換為參考地點";
+    renderFood();
+  }, { enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 });
+}
+window.relocateFood = () => { tryLocateFood(); };
+window.setFoodCenterIdx = (i, silent) => {
+  foodState.centerIdx = i;
+  foodState.center = DATA.foodCenters[i];
+  foodState.city = DATA.foodCenters[i].city;
+  foodState.note = "";
+  if (!silent) renderFood();
+};
+window.setFoodCity = c => { foodState.city = c; renderFood(); };
+
+function renderFood() {
+  const sheet = document.getElementById("foodsheet");
+  if (!sheet || sheet.hidden) return;
+  const st = foodState, c = st.center;
+  foodList = DATA.food
+    .filter(f => st.city === "all" || f.city === st.city)
+    .map(f => Object.assign({}, f, { dist: haversineM(c.lat, c.lng, f.lat, f.lng) }))
+    .sort((a, b) => a.dist - b.dist);
+
+  const chips = [
+    `<button class="chip ${st.centerIdx === -2 ? "on" : ""}" onclick="relocateFood()">${st.centerIdx === -2 ? "目前位置" : "用我的位置"}</button>`,
+    ...DATA.foodCenters.map((cc, i) => `<button class="chip ${st.centerIdx === i ? "on" : ""}" onclick="setFoodCenterIdx(${i})">${esc(cc.label)}</button>`)
+  ].join("");
+
+  const cards = foodList.map((f, i) => `
+    <div class="fcard">
+      <div class="fc-top"><span class="fc-name">${esc(f.name)}</span><span class="fc-dist">${fmtDist(f.dist)}</span></div>
+      <div class="fc-type"><span class="badge ${f.city}">${f.city === "cm" ? "清邁" : "曼谷"}</span> <span class="badge gold">${esc(f.type)}</span></div>
+      <div class="fc-dishes"><b>必點</b>${esc(f.dishes)}</div>
+      <div class="fc-addr">${esc(f.addr)}</div>
+      <div class="btnrow">
+        <a class="abtn primary" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}">Google Maps 導航</a>
+        <button class="abtn" data-copyaddr="${i}">複製地址</button>
+      </div>
+    </div>`).join("");
+
+  sheet.innerHTML = `
+    <div class="fs-panel">
+      <div class="fs-head">
+        <div class="fs-title">吃飯 · 找最近推薦</div>
+        <button class="fs-close" onclick="closeFood()" aria-label="關閉">✕</button>
+      </div>
+      ${st.note ? `<div class="fs-note">${esc(st.note)}</div>` : ""}
+      <div class="fs-center">距離基準：<b>${esc(c.label)}</b></div>
+      <div class="fs-chips">${chips}</div>
+      <div class="seg fs-seg">
+        <button class="${st.city === "all" ? "sel" : ""}" onclick="setFoodCity('all')">全部 ${DATA.food.length}</button>
+        <button class="${st.city === "cm" ? "sel" : ""}" onclick="setFoodCity('cm')">清邁</button>
+        <button class="${st.city === "bkk" ? "sel" : ""}" onclick="setFoodCity('bkk')">曼谷</button>
+      </div>
+      <div class="fs-list">${cards}</div>
+    </div>`;
+}
+
 /* ===== router ===== */
 const PAGES = { home: renderHome, plan: renderPlan, orders: renderOrders, list: renderList, info: renderInfo };
 function go(tab, arg) {
@@ -624,45 +757,115 @@ function parseCSV(text) {
   return rows;
 }
 
-// 解析單一天分頁（欄位：時間/標題/說明/地圖關鍵字/費用/注意）
-function parseEventTab(text) {
+// 解析單一天分頁。一般列＝行程點；「時間」欄填 提醒/雨備/標題 的列＝當日欄位（不算行程點）
+// 回傳 { events, note, rain, title }
+const DAY_FIELD = { "提醒": "note", "提醒事項": "note", "雨備": "rain", "雨天備案": "rain", "標題": "title", "當日標題": "title" };
+function parseDayTab(text) {
   const rows = parseCSV(text);
   if (!rows.length) return null;
   const head = rows[0].map(h => h.trim());
   if (head[0] !== "時間") return null; // 防呆：分頁不存在時 gviz 會退回第一頁，擋掉
   const ci = { time: head.indexOf("時間"), title: head.indexOf("標題"), desc: head.indexOf("說明"), mapq: head.indexOf("地圖關鍵字"), cost: head.indexOf("費用"), warn: head.indexOf("注意") };
   const padTime = t => /^\d:\d\d/.test(t) ? "0" + t : t;
-  const evs = [];
+  const out = { events: [] };
   for (let r = 1; r < rows.length; r++) {
     const row = rows[r]; if (!row) continue;
-    const title = (row[ci.title] || "").trim();
     const time = (row[ci.time] || "").trim();
+    const title = (row[ci.title] || "").trim();
+    const desc = (row[ci.desc] || "").trim();
+    if (DAY_FIELD[time]) { // 特殊列：當日欄位
+      const val = [title, desc].filter(Boolean).join("");
+      if (val) out[DAY_FIELD[time]] = val;
+      continue;
+    }
     if (!title) continue;
-    const ev = { time: padTime(time), title, desc: (row[ci.desc] || "").trim() };
+    const ev = { time: padTime(time), title, desc };
     const mq = ci.mapq >= 0 ? (row[ci.mapq] || "").trim() : ""; if (mq) ev.mapq = mq;
     const cost = ci.cost >= 0 ? (row[ci.cost] || "").trim() : ""; if (cost) ev.cost = cost;
     const warn = ci.warn >= 0 ? (row[ci.warn] || "").trim() : ""; if (warn) ev.warn = warn;
-    evs.push(ev);
+    out.events.push(ev);
   }
-  return evs.length ? evs : null;
+  return out;
+}
+
+// 解析美食試算表（自動尋找表頭列，容忍前置空白列）
+function parseFoodSheet(text) {
+  const rows = parseCSV(text);
+  let hi = -1;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const cells = rows[r].map(c => c.trim());
+    if (cells.includes("店名") && cells.includes("緯度")) { hi = r; break; }
+  }
+  if (hi < 0) return null; // 防呆：讀到的不是美食表就放棄
+  const head = rows[hi].map(h => h.trim());
+  const ci = { city: head.indexOf("城市代碼"), name: head.indexOf("店名"), type: head.indexOf("分類"), dishes: head.indexOf("必點推薦"), lat: head.indexOf("緯度"), lng: head.indexOf("經度"), addr: head.indexOf("地址") };
+  const out = [];
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row) continue;
+    const name = (row[ci.name] || "").trim();
+    const lat = parseFloat(row[ci.lat]), lng = parseFloat(row[ci.lng]);
+    if (!name || !isFinite(lat) || !isFinite(lng)) continue; // 跳過缺店名或座標錯的列
+    out.push({
+      city: (row[ci.city] || "").trim().toLowerCase() === "bkk" ? "bkk" : "cm",
+      name, lat, lng,
+      type: ci.type >= 0 ? (row[ci.type] || "").trim() : "",
+      dishes: ci.dishes >= 0 ? (row[ci.dishes] || "").trim() : "",
+      addr: ci.addr >= 0 ? (row[ci.addr] || "").trim() : ""
+    });
+  }
+  return out.length ? out : null;
 }
 
 async function refreshFromSheet() {
   if (typeof SHEET_ID === "undefined" || !SHEET_ID) return;
   const tabUrl = name => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
   try {
-    const results = await Promise.all(DATA.days.map(async d => {
+    const jobs = DATA.days.map(async d => {
       try {
         const res = await fetch(tabUrl(d.label), { cache: "no-store" });
         if (!res.ok) return null;
-        return parseEventTab(await res.text());
+        return parseDayTab(await res.text());
       } catch (e) { return null; }
-    }));
+    });
+    // 美食清單（優先讀取主試算表的「美食」分頁，若無則嘗試獨立美食表）
+    jobs.push((async () => {
+      // 1. 優先嘗試主行程表的「美食」分頁
+      try {
+        const res = await fetch(tabUrl("美食"), { cache: "no-store" });
+        if (res.ok) {
+          const food = parseFoodSheet(await res.text());
+          if (food && food.length) return { food };
+        }
+      } catch (e) {}
+      // 2. 次要嘗試獨立美食表（若有設定且已共用）
+      if (DATA.foodSheetId) {
+        try {
+          const res = await fetch(`https://docs.google.com/spreadsheets/d/${DATA.foodSheetId}/gviz/tq?tqx=out:csv`, { cache: "no-store" });
+          if (res.ok) {
+            const food = parseFoodSheet(await res.text());
+            if (food && food.length) return { food };
+          }
+        } catch (e) {}
+      }
+      return null;
+    })());
+
+    const results = await Promise.all(jobs);
+    const foodRes = results.pop();
     let changed = false;
-    results.forEach((evs, i) => { if (evs && evs.length) { DATA.days[i].events = evs; changed = true; } });
+    results.forEach((res, i) => {
+      if (!res) return;
+      if (res.events && res.events.length) { DATA.days[i].events = res.events; changed = true; }
+      if (res.note) { DATA.days[i].note = res.note; changed = true; }
+      if (res.rain) { DATA.days[i].rain = res.rain; changed = true; }
+      if (res.title) { DATA.days[i].title = res.title; changed = true; }
+    });
+    if (foodRes && foodRes.food) { DATA.food = foodRes.food; changed = true; }
     if (changed) {
       const active = document.querySelector(".page.active");
       if (active) { const tab = active.id.replace("page-", ""); if (PAGES[tab]) PAGES[tab](); }
+      const fs = document.getElementById("foodsheet");
+      if (fs && !fs.hidden) renderFood();
     }
   } catch (e) { /* 離線或未公開：靜默使用內建資料 */ }
 }
