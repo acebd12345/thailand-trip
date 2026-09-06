@@ -111,37 +111,15 @@ function nextFlight() {
 function fmtClock(mins) {
   return String(Math.floor(mins / 60)).padStart(2, "0") + ":" + String(mins % 60).padStart(2, "0");
 }
-function flightCardMini(f) {
-  return `
-    <button class="infocard" onclick="go('orders','sec-fl')">
-      <div class="ic-head">${QI.plane}<span>航班資訊</span></div>
-      <div class="ic-line">${f.date.slice(5).replace("-", "/")}（${esc(f.day)}）${esc(f.from.replace(/ .*/, ""))} → ${esc(f.to.replace(/ .*/, ""))}</div>
-      <div class="ic-strong">${esc(f.dep)} – ${esc(f.arr)}</div>
-      <div class="ic-sub">${esc(f.no)} · ${esc(f.airline)}</div>
-      <div class="ic-more">查看詳情 ›</div>
-    </button>`;
-}
-function hotelCardMini(h, withActions) {
-  return `
-    <div class="infocard">
-      <div class="ic-head">${QI.bed}<span>住宿資訊</span></div>
-      <div class="ic-strong" style="font-size:15px">${esc(h.name)}</div>
-      <div class="ic-sub">${esc(h.dates)} · ${esc(h.nights)}</div>
-      ${withActions ? `<div class="mini-actions">
-        <button class="abtn" onclick="copyText('${esc(h.addrEn)}','英文地址已複製，上車給司機看')">複製地址</button>
-        <a class="abtn" target="_blank" rel="noopener" href="${mapUrl(h.mapq)}">導航</a>
-      </div>` : `<div class="ic-more" onclick="go('orders','sec-ho')">查看詳情 ›</div>`}
-    </div>`;
-}
-
 function renderHome() {
   const phase = tripPhase();
   const { mins } = bkkNow();
   let html = `
-    <div class="home-head">
-      <h1 class="hh-title">${esc(DATA.trip.title)} <span class="hh-date">2026.9.20–27</span></h1>
-      <div class="hh-sub">8 天 7 夜 · ${esc(DATA.trip.sub)}</div>
-    </div>
+    <div class="travel-mast"><span>THAILAND / 2026</span><span>${esc(DATA.trip.sub)}</span></div>
+    <header class="home-cover">
+      <img src="assets/img/hero.jpg" alt="泰國旅行風景" fetchpriority="high">
+      <div class="cover-copy"><span class="eyebrow">CHIANG MAI & BANGKOK</span><h1>${esc(DATA.trip.title)}</h1><p>09.20 — 09.27 <span>8 天 7 夜</span></p></div>
+    </header>
     <div class="ob-badge" id="offline-note"><span class="dot"></span><span id="offline-text">內容更新於 ${esc(DATA.updated)}</span></div>`;
 
   if (phase === "before") {
@@ -151,38 +129,22 @@ function renderHome() {
     const pct = all.length ? Math.round(done / all.length * 100) : 0;
     const undone = all.filter(it => !store.get("chk_" + it.id, false)).slice(0, 3);
     html += `
-      <div class="today-card">
-        <div class="tc-top">
-          <div>
-            <span class="tc-tag tag-orange">出發倒數</span>
-            <div class="tc-d">${n}<span> 天</span></div>
-          </div>
-          <div class="tc-date">9/20 出發<br>週日 07:40</div>
-        </div>
-        <div class="tc-div"></div>
+      <div class="departure-strip"><div><strong>${n}</strong><span>天後出發</span></div><p>9/20 週日<br><b>07:40 桃園起飛</b></p></div>
+      <div class="today-card prep-card">
         <div class="prep-row">
           <div class="prep-label">行前準備</div>
           <div class="prep-num"><b>${done}</b> / ${all.length}</div>
         </div>
         <div class="mini-progress"><div style="width:${pct}%"></div></div>
         ${undone.length ? `<div class="prep-next">${undone.map(it => `<div class="pn-item">${esc(it.text)}</div>`).join("")}</div>` : `<div class="prep-done">全部準備完成，可以出發了</div>`}
-        <button class="btn-green" onclick="go('list',0)">查看完整清單</button>
-      </div>
-      <button class="cta-strip food-cta" onclick="openFood()">
-        <div class="cta-ic">${QI.food}</div>
-        <div class="cta-body"><b>吃飯 · 找最近推薦</b><span>72 間口袋美食，依距離由近到遠</span></div>
-        <span class="cta-go">開找 ›</span>
-      </button>
-      <div class="twocards">
-        ${flightCardMini(DATA.flights[0])}
-        ${hotelCardMini(DATA.hotels[0], false)}
+        <button class="prep-link" onclick="go('list',0)">查看完整清單 <span aria-hidden="true">→</span></button>
       </div>
       <a class="cta-strip" href="https://tdac.immigration.go.th" target="_blank" rel="noopener">
         <div class="cta-ic">${QI.doc}</div>
         <div class="cta-body"><b>9/17 起填 TDAC 電子入境卡</b><span>官方免費網站，填完截圖存手機</span></div>
         <span class="cta-go">前往 ›</span>
       </a>
-      ${homeTools(false)}`;
+      `;
   } else if (phase === "during") {
     const di = todayDayIndex();
     const day = DATA.days[di];
@@ -207,50 +169,32 @@ function renderHome() {
           <div class="tc-nextdesc">${esc(nextEv.desc)}</div>
           ${nowEv ? `<div class="tc-nowline">現在進行：${esc(nowEv.time)} ${esc(nowEv.title)}</div>` : ""}
           <div class="tc-actions">
-            <button class="abtn primary" onclick="go('plan',${di})">今天完整行程</button>
             ${nextEv.mapq ? `<a class="btn-green sm" target="_blank" rel="noopener" href="${mapUrl(nextEv.mapq)}">導航</a>` : ""}
           </div>`
         : `
           <div class="tc-next">今天行程跑完了，好好休息</div>
-          <div class="tc-actions"><button class="abtn primary" onclick="go('plan',${di})">看今天完整行程</button></div>`}
+`}
       </div>
-      <button class="cta-strip food-cta" onclick="openFood()">
-        <div class="cta-ic">${QI.food}</div>
-        <div class="cta-body"><b>吃飯 · 找最近推薦</b><span>72 間口袋美食，依距離由近到遠</span></div>
-        <span class="cta-go">開找 ›</span>
-      </button>
       ${hotel ? hotelBlockHTML(hotel, {}) : ""}
       <div class="rain-strip"><b>今日雨備</b>${esc(day.rain)}</div>
-      ${flightCardMini(nextFlight())}
       <button class="cta-strip" onclick="go('list',1)">
         <div class="cta-ic">${QI.check}</div>
         <div class="cta-body"><b>出門前檢查</b><span>護照、傘、錢包、防蚊液帶了沒</span></div>
         <span class="cta-go">查看 ›</span>
       </button>
-      ${homeTools(true)}`;
+      `;
   } else {
     html += `
       <div class="today-card" style="text-align:center;padding:30px 20px">
         <div class="tc-d" style="justify-content:center">旅程圓滿</div>
         <div style="color:var(--ink-soft);margin-top:8px">8 天的清邁與曼谷回憶，<br>歡迎隨時回來翻看行程與照片。</div>
-        <button class="btn-green" style="margin-top:16px" onclick="go('plan',0)">回顧行程</button>
+
       </div>
-      ${homeTools(false)}`;
+      `;
   }
 
   $("#page-home").innerHTML = html;
   updateOfflineNote();
-}
-
-function homeTools(during) {
-  const tools = during
-    ? [["sos", "緊急電話", "info", "sec-tel", "alert"], ["chat", "常用泰語", "info", "sec-phrases", ""],
-       ["coin", "小費匯率", "info", "sec-money", ""], ["doc", "防雷提醒", "info", "sec-scam", ""]]
-    : [["cal", "每日行程", "plan", "", ""], ["plane", "機票飯店", "orders", "", ""],
-       ["coin", "小費匯率", "info", "sec-money", ""], ["chat", "常用泰語", "info", "sec-phrases", ""]];
-  return `<div class="tool-row">${tools.map(t =>
-    `<button class="tool ${t[4]}" onclick="go('${t[2]}'${t[3] ? `,'${t[3]}'` : ""})">${QI[t[0]]}<span>${t[1]}</span></button>`
-  ).join("")}</div>`;
 }
 
 function updateOfflineNote() {
@@ -258,7 +202,7 @@ function updateOfflineNote() {
   const txt = $("#offline-text");
   if (navigator.onLine) {
     el.classList.remove("off");
-    txt.textContent = swReady ? "離線可用 · 所有內容已下載" : "內容更新於 " + DATA.updated;
+    txt.textContent = swReady ? "離線手冊已就緒" : "內容更新於 " + DATA.updated;
   } else {
     el.classList.add("off");
     txt.textContent = "目前離線中 · 顯示已儲存的內容";
@@ -270,7 +214,7 @@ let selDay = 0;
 function renderPlan() {
   const pills = DATA.days.map((d, i) => {
     const isToday = d.date === bkkNow().date;
-    return `<button class="daypill ${i === selDay ? "sel " + d.cityClass : ""} ${isToday ? "today-ring" : ""}" onclick="selectDay(${i})">${d.label} ${esc(d.week.replace("週", ""))}<small>${d.date.slice(5).replace("-", "/")}</small></button>`;
+    return `<button class="daypill ${i === selDay ? "sel " + d.cityClass : ""} ${isToday ? "today-ring" : ""}" aria-pressed="${i === selDay}" onclick="selectDay(${i})">${d.label} ${esc(d.week.replace("週", ""))}<small>${d.date.slice(5).replace("-", "/")}</small></button>`;
   }).join("");
 
   const day = DATA.days[selDay];
@@ -278,38 +222,39 @@ function renderPlan() {
   const events = day.events.map((ev, i) => {
     const s = st[i];
     const stateTag = s === "now" ? `<span class="ev-state now">現在</span>` : s === "next" ? `<span class="ev-state next">下一站</span>` : s === "done" ? `<span class="ev-state done">完成</span>` : "";
-    const btns = [];
-    if (ev.mapq) {
-      btns.push(`<a class="abtn" target="_blank" rel="noopener" href="${mapUrl(ev.mapq)}">導航</a>`);
-      btns.push(`<button class="abtn" onclick="copyTxt('${esc(ev.mapq)}')">複製地點</button>`);
-    }
     return `
-      <div class="ev status-${s || "todo"}">
-        <span class="ev-time">${esc(ev.time)}</span>${stateTag}
+      <article class="ev status-${s || "todo"}">
+        <div class="ev-when"><span class="ev-time">${esc(ev.time)}</span>${stateTag}</div>
         <div class="ev-card">
-          <div class="ev-title">${esc(ev.title)}</div>
-          <div class="ev-desc">${esc(ev.desc)}</div>
-          ${ev.cost ? `<div class="ev-cost">費用 ${esc(ev.cost)}</div>` : ""}
-          ${ev.warn ? `<div class="ev-warn">注意：${esc(ev.warn)}</div>` : ""}
-          ${btns.length ? `<div class="btnrow">${btns.join("")}</div>` : ""}
+          <div class="ev-heading"><h3 class="ev-title">${esc(ev.title)}</h3>${ev.mapq ? `<a class="event-nav" target="_blank" rel="noopener" href="${mapUrl(ev.mapq)}" aria-label="導航至${esc(ev.title)}">導航 ↗</a>` : ""}</div>
+          ${ev.warn ? `<div class="ev-warn">${esc(ev.warn)}</div>` : ""}
+          <details class="event-detail"${s === "now" ? " open" : ""}><summary>行程詳情</summary>
+            <div class="ev-desc">${esc(ev.desc)}</div>
+            ${ev.cost ? `<div class="ev-cost">費用 ${esc(ev.cost)}</div>` : ""}
+            ${ev.mapq ? `<button class="copy-place" data-place="${esc(ev.mapq)}">複製地點</button>` : ""}
+          </details>
         </div>
-      </div>`;
+      </article>`;
   }).join("");
 
   const hotel = hotelForNight(day.date);
   $("#page-plan").innerHTML = `
+    <div class="page-head compact-head"><h1>每日行程</h1><span>9/20 — 9/27</span></div>
     <div class="daybar" id="daybar">${pills}</div>
+    <div class="day-hero"><img class="dayimg" src="assets/img/${day.img}" alt="${esc(day.city)}旅行風景">
     <div class="dayhead">
       <div class="dh-city ${day.cityClass}">${esc(day.city)} · ${esc(day.week)}</div>
       <h2>${esc(day.title)}</h2>
       <div class="dh-date">${day.date.replace(/-/g, "/")}　${day.date === bkkNow().date ? "— 就是今天" : ""}</div>
     </div>
-    <img class="dayimg" src="assets/img/${day.img}" alt="" onerror="this.remove()">
-    ${hotel ? hotelBlockHTML(hotel, { flat: true }) : ""}
-    ${day.note ? `<div class="notebox"><b>提醒事項</b>${esc(day.note)}</div>` : ""}
-    <div class="rainbox"><b>如果下雨就去這裡</b>${esc(day.rain)}</div>
+    </div>
+    <div class="day-notes">${day.note ? `<details class="notebox"><summary>出發前提醒</summary><p>${esc(day.note)}</p></details>` : ""}
+    <details class="rainbox"><summary>下雨的備案</summary><p>${esc(day.rain)}</p></details></div>
+    <div class="section-title itinerary-label">${day.events.length} 站旅程 ${hotel ? `<button class="stay-shortcut" onclick="jumpTo('plan-stay')">今晚住宿 ↗</button>` : `<span>DAY ${selDay + 1}</span>`}</div>
     <div class="timeline">${events}</div>
-    <div class="swipe-hint">← 左右滑動切換天數 →</div>`;
+    ${hotel ? `<div id="plan-stay">${hotelBlockHTML(hotel, { flat: true })}</div>` : ""}
+    <div class="swipe-hint">← 左右滑動切換天數 →</div>
+    <button class="food-fab" onclick="openFood()" aria-haspopup="dialog" aria-controls="foodsheet">${QI.food}<span>附近美食</span></button>`;
 
   const selPill = document.querySelectorAll(".daypill")[selDay];
   if (selPill) selPill.scrollIntoView({ inline: "center", block: "nearest" });
@@ -320,6 +265,7 @@ window.selectDay = i => { selDay = i; renderPlan(); window.scrollTo({ top: 0 });
 let tx = null, ty = null;
 document.addEventListener("touchstart", e => {
   if (!$("#page-plan").classList.contains("active")) return;
+  if (e.target.closest("button, a, input, summary, .daybar")) { tx = ty = null; return; }
   tx = e.touches[0].clientX; ty = e.touches[0].clientY;
 }, { passive: true });
 document.addEventListener("touchend", e => {
@@ -339,12 +285,11 @@ function renderOrders() {
     return `
     <div class="card flight-card">
       <div><span class="badge gold">${esc(f.no)} · ${esc(f.airline)}</span>　<span style="font-size:13.5px;color:var(--ink-soft)">${f.date.slice(5).replace("-", "/")}（${esc(f.day)}）</span></div>
-      <div class="fc-route" style="margin-top:8px">${esc(f.from)} <span class="arrow">→</span> ${esc(f.to)}</div>
-      <div class="fc-times"><b>${esc(f.dep)}</b> 出發　—　<b>${esc(f.arr)}</b> 抵達</div>
+      <div class="ticket-route"><div><span>${esc(f.from)}</span><strong>${esc(f.dep)}</strong><small>出發</small></div><div class="ticket-path">${QI.plane}<span></span></div><div><span>${esc(f.to)}</span><strong>${esc(f.arr)}</strong><small>抵達</small></div></div>
       <div class="fc-note">${esc(f.note)}</div>
       <div class="pnr-row">
-        <label>訂位代碼</label>
-        <input value="${esc(pnr)}" placeholder="可自行輸入" maxlength="8" onchange="savePnr('${f.pnrKey}',this.value)">
+        <label for="pnr-${i}">訂位代碼</label>
+        <input id="pnr-${i}" value="${esc(pnr)}" placeholder="可自行輸入" maxlength="8" onchange="savePnr('${f.pnrKey}',this.value)">
       </div>
       <div class="pnr-note">可自行輸入，只會存在這台手機、不會同步</div>
     </div>`;
@@ -382,7 +327,7 @@ function renderOrders() {
     .map(c => `<button class="chip" onclick="jumpTo('${c[0]}')">${c[1]}</button>`).join("");
 
   $("#page-orders").innerHTML = `
-    <div class="page-head"><h1>出發與入住資訊</h1><p>航班、住宿與預訂提醒</p></div>
+    <div class="page-head"><span class="eyebrow">TICKETS & STAYS</span><h1>航班與住宿</h1><p>航班、住宿與預訂，都放在一起。</p></div>
     <div class="chipnav">${ochips}</div>
     <div class="section-title" id="sec-fl">航班</div>${flights}
     <div class="section-title" id="sec-ho">住宿 · 已確認</div>${hotels}
@@ -404,7 +349,7 @@ function renderList() {
       <div class="prog-line"><span>出發前完成這些就安心了</span><span><b>${done}</b> / ${all.length}</span></div>
       <div class="mini-progress" style="margin:0 4px 14px"><div style="width:${Math.round(done / all.length * 100)}%"></div></div>
       ${DATA.checklist.map(g => `
-        <div class="chk-group"><h3>◆ ${esc(g.group)}</h3>
+        <div class="chk-group"><h3>${esc(g.group)}</h3>
         ${g.items.map(it => chkRow("chk_" + it.id, it.text)).join("")}</div>`).join("")}`;
   } else {
     const { date } = bkkNow();
@@ -417,7 +362,7 @@ function renderList() {
       ${done > 0 ? `<button class="abtn" style="margin-top:6px" onclick="resetDaily()">一鍵全部清掉，重新檢查</button>` : ""}`;
   }
   $("#page-list").innerHTML = `
-    <div class="page-head"><h1>清單</h1><p>勾選狀態各自手機獨立保存</p></div>
+    <div class="page-head"><span class="eyebrow">READY TO GO</span><h1>出發清單</h1><p>勾選會保存在這台手機，慢慢準備就好。</p></div>
     <div class="seg">
       <button class="${listMode === 0 ? "sel" : ""}" onclick="setListMode(0)">行前準備</button>
       <button class="${listMode === 1 ? "sel" : ""}" onclick="setListMode(1)">每日出門</button>
@@ -425,11 +370,19 @@ function renderList() {
 }
 function chkRow(key, text) {
   const v = store.get(key, false);
-  return `<div class="chk ${v ? "done" : ""}" onclick="toggleChk('${key}')">
-    <span class="box">${v ? "✓" : ""}</span><span class="txt">${esc(text)}</span></div>`;
+  return `<button type="button" class="chk ${v ? "done" : ""}" role="checkbox" data-check-key="${key}" aria-checked="${v}" onclick="toggleChk('${key}')">
+    <span class="box" aria-hidden="true">${v ? "✓" : ""}</span><span class="txt">${esc(text)}</span></button>`;
 }
 window.setListMode = m => { listMode = m; renderList(); };
-window.toggleChk = k => { store.set(k, !store.get(k, false)); renderList(); if ($("#page-home").classList.contains("active")) renderHome(); };
+window.toggleChk = k => {
+  const y = window.scrollY;
+  store.set(k, !store.get(k, false));
+  renderList();
+  const item = [...document.querySelectorAll("[data-check-key]")].find(el => el.dataset.checkKey === k);
+  if (item) item.focus({ preventScroll: true });
+  window.scrollTo(0, y);
+  if ($("#page-home").classList.contains("active")) renderHome();
+};
 window.resetDaily = () => {
   const { date } = bkkNow();
   const key = "daily_" + date;
@@ -534,7 +487,7 @@ function renderInfo() {
   ].map(c => `<button class="chip" onclick="jumpTo('${c[0]}')">${c[1]}</button>`).join("");
 
   $("#page-info").innerHTML = `
-    <div class="page-head"><h1>資訊</h1></div>
+    <div class="page-head"><span class="eyebrow">THE TRAVEL ESSENTIALS</span><h1>旅行工具</h1><p>常用泰語、小費匯率與緊急聯絡。</p></div>
     <div class="chipnav">${chips}</div>
 
     <div class="section-title" id="sec-tel">緊急電話（點了直接撥）</div>
@@ -599,6 +552,8 @@ window.convThb = v => {
 /* ===== 吃飯 · 找最近推薦 ===== */
 let foodState = { center: null, centerIdx: null, city: "all", note: "" };
 let foodList = [];
+let foodOpener = null;
+let foodDay = null;
 
 function haversineM(lat1, lng1, lat2, lng2) {
   const R = 6371000, toR = d => d * Math.PI / 180;
@@ -615,7 +570,7 @@ const inThailand = (lat, lng) => lat > 5.5 && lat < 20.6 && lng > 97.2 && lng < 
 
 function defaultFoodCenterIdx() {
   const { date } = bkkNow();
-  const day = DATA.days.find(d => d.date === date);
+  const day = $("#page-plan").classList.contains("active") ? DATA.days[selDay] : DATA.days.find(d => d.date === date);
   return (day && day.cityClass === "bkk") ? 3 : 0; // 曼谷日→Wyndham，其餘→清邁飯店
 }
 
@@ -631,11 +586,15 @@ window.openFood = function () {
       if (e.target === sheet) closeFood();
     });
   }
+  foodOpener = document.activeElement;
   sheet.hidden = false;
+  document.getElementById("app").inert = true;
+  document.getElementById("tabbar").inert = true;
   document.body.style.overflow = "hidden";
-  if (foodState.centerIdx === null) {
+  const selectedDate = DATA.days[selDay].date;
+  if (foodState.centerIdx === null || foodDay !== selectedDate) {
     setFoodCenterIdx(defaultFoodCenterIdx(), true);
-    tryLocateFood();
+    foodDay = selectedDate;
   }
   renderFood();
 };
@@ -643,6 +602,9 @@ window.closeFood = function () {
   const s = document.getElementById("foodsheet");
   if (s) s.hidden = true;
   document.body.style.overflow = "";
+  document.getElementById("app").inert = false;
+  document.getElementById("tabbar").inert = false;
+  if (foodOpener && foodOpener.isConnected) foodOpener.focus({ preventScroll: true });
 };
 function tryLocateFood() {
   if (!("geolocation" in navigator)) { foodState.note = "此裝置不支援定位，已切換為參考地點"; renderFood(); return; }
@@ -677,6 +639,7 @@ window.setFoodCity = c => { foodState.city = c; renderFood(); };
 function renderFood() {
   const sheet = document.getElementById("foodsheet");
   if (!sheet || sheet.hidden) return;
+  const focused = sheet.contains(document.activeElement) ? document.activeElement.getAttribute("onclick") : null;
   const st = foodState, c = st.center;
   foodList = DATA.food
     .filter(f => st.city === "all" || f.city === st.city)
@@ -701,9 +664,9 @@ function renderFood() {
     </div>`).join("");
 
   sheet.innerHTML = `
-    <div class="fs-panel">
+    <div class="fs-panel" role="dialog" aria-modal="true" aria-label="附近美食">
       <div class="fs-head">
-        <div class="fs-title">吃飯 · 找最近推薦</div>
+        <div><span class="eyebrow">GOOD FOOD, GOOD MOOD</span><div class="fs-title">附近，有什麼好吃的？</div></div>
         <button class="fs-close" onclick="closeFood()" aria-label="關閉">✕</button>
       </div>
       ${st.note ? `<div class="fs-note">${esc(st.note)}</div>` : ""}
@@ -714,27 +677,65 @@ function renderFood() {
         <button class="${st.city === "cm" ? "sel" : ""}" onclick="setFoodCity('cm')">清邁</button>
         <button class="${st.city === "bkk" ? "sel" : ""}" onclick="setFoodCity('bkk')">曼谷</button>
       </div>
-      <div class="fs-list">${cards}</div>
+      <div class="fs-list">${cards || '<div class="card">這個城市還沒有美食資料，試試其他城市。</div>'}</div>
     </div>`;
+  const nextFocus = focused && [...sheet.querySelectorAll("button[onclick]")].find(el => el.getAttribute("onclick") === focused);
+  (nextFocus || sheet.querySelector(".fs-close")).focus({ preventScroll: true });
 }
+document.addEventListener("keydown", e => {
+  const sheet = document.getElementById("foodsheet");
+  if (!sheet || sheet.hidden) return;
+  if (e.key === "Escape") { e.preventDefault(); closeFood(); return; }
+  if (e.key !== "Tab") return;
+  const items = [...sheet.querySelectorAll('button, a[href], input, [tabindex="0"]')].filter(el => !el.disabled);
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
+
+document.addEventListener("click", e => {
+  const button = e.target.closest("[data-place]");
+  if (button) copyTxt(button.dataset.place);
+});
 
 /* ===== router ===== */
 const PAGES = { home: renderHome, plan: renderPlan, orders: renderOrders, list: renderList, info: renderInfo };
-function go(tab, arg) {
+const pageScroll = {};
+const pageDetails = {};
+function go(tab, arg, fromHistory = false) {
+  if (!PAGES[tab]) tab = "home";
+  const oldPage = document.querySelector(".page.active");
+  if (oldPage) {
+    const oldTab = oldPage.id.slice(5);
+    pageScroll[oldTab] = window.scrollY;
+    pageDetails[oldTab] = [...oldPage.querySelectorAll("details")].map(el => el.open);
+  }
+  if (oldPage && oldPage.id === "page-" + tab && arg === undefined && !fromHistory) return;
   if (tab === "plan" && typeof arg === "number") selDay = arg;
   if (tab === "list" && typeof arg === "number") listMode = arg;
   document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
-  document.querySelectorAll("#tabbar .tab").forEach(t => t.classList.toggle("active", t.dataset.tab === tab));
+  document.querySelectorAll("#tabbar .tab").forEach(t => {
+    t.classList.toggle("active", t.dataset.tab === tab);
+    if (t.dataset.tab === tab) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+  });
   $("#page-" + tab).classList.add("active");
   PAGES[tab]();
+  if (arg === undefined && pageDetails[tab]) {
+    document.querySelectorAll("#page-" + tab + " details").forEach((el, i) => { el.open = !!pageDetails[tab][i]; });
+  }
   if (typeof arg === "string" && document.getElementById(arg)) {
     document.getElementById(arg).scrollIntoView({ block: "start" });
   } else {
-    window.scrollTo({ top: 0 });
+    window.scrollTo({ top: arg === undefined ? (pageScroll[tab] || 0) : 0 });
   }
-  if (location.hash !== "#" + tab) history.replaceState(null, "", "#" + tab);
+  if (!fromHistory && location.hash !== "#" + tab) history.pushState(null, "", "#" + tab);
 }
 window.go = go;
+window.addEventListener("popstate", () => {
+  const sheet = document.getElementById("foodsheet");
+  if (sheet && !sheet.hidden) closeFood();
+  go(location.hash.slice(1), undefined, true);
+});
 document.querySelectorAll("#tabbar .tab").forEach(t => t.addEventListener("click", () => go(t.dataset.tab)));
 
 /* ===== Google Sheet 同步 ===== */
@@ -863,7 +864,17 @@ async function refreshFromSheet() {
     if (foodRes && foodRes.food) { DATA.food = foodRes.food; changed = true; }
     if (changed) {
       const active = document.querySelector(".page.active");
-      if (active) { const tab = active.id.replace("page-", ""); if (PAGES[tab]) PAGES[tab](); }
+      if (active) {
+        const tab = active.id.replace("page-", "");
+        if (PAGES[tab]) {
+          // 資料更新時就地重繪：保留閱讀位置與已展開的詳情，不打斷目前操作
+          const y = window.scrollY;
+          const open = [...active.querySelectorAll("details")].map(el => el.open);
+          PAGES[tab]();
+          active.querySelectorAll("details").forEach((el, i) => { if (open[i] !== undefined) el.open = open[i]; });
+          window.scrollTo({ top: y });
+        }
+      }
       const fs = document.getElementById("foodsheet");
       if (fs && !fs.hidden) renderFood();
     }
@@ -873,7 +884,7 @@ async function refreshFromSheet() {
 /* ===== init ===== */
 let swReady = false;
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
-  navigator.serviceWorker.register("sw.js").then(() => { swReady = true; updateOfflineNote(); }).catch(() => {});
+  navigator.serviceWorker.register("sw.js").then(() => navigator.serviceWorker.ready).then(() => { swReady = true; updateOfflineNote(); }).catch(() => {});
 }
 window.addEventListener("online", updateOfflineNote);
 window.addEventListener("offline", updateOfflineNote);
@@ -881,7 +892,8 @@ window.addEventListener("offline", updateOfflineNote);
 const initTab = (location.hash || "#home").slice(1);
 const ti = todayDayIndex();
 if (ti >= 0) selDay = ti;
-go(PAGES[initTab] ? initTab : "home");
+history.replaceState(null, "", "#" + (PAGES[initTab] ? initTab : "home"));
+go(PAGES[initTab] ? initTab : "home", undefined, true);
 
 refreshFromSheet();
 

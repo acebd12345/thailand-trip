@@ -43,30 +43,34 @@
     wrap.id = "gate";
     wrap.innerHTML = `
       <div class="gate-card">
-        <div class="gate-kick">CHIANG MAI &amp; BANGKOK</div>
-        <h1 class="gate-title">清邁與曼谷</h1>
-        <div class="gate-sub">家族旅行手冊 · 請輸入通行密碼</div>
-        <input id="gate-pw" type="password" inputmode="numeric" autocomplete="off" placeholder="通行密碼" />
+        <div class="gate-cover"><span class="eyebrow">THAILAND / 2026</span><div><h2>清邁的慢，<br>曼谷的熱鬧。</h2><p>09.20 — 09.27 · 8 天 7 夜</p></div></div>
+        <div class="gate-form"><div class="gate-kick">OUR FAMILY TRIP</div>
+        <h1 class="gate-title">我們的泰國旅行</h1>
+        <div class="gate-sub">一家人的行程與口袋美食，都在這裡。</div>
+        <label class="gate-label" for="gate-pw">旅行通行密碼</label>
+        <input id="gate-pw" type="password" autocomplete="current-password" placeholder="輸入通行密碼" aria-describedby="gate-err" />
         <label class="gate-remember"><input type="checkbox" id="gate-remember" /> 記住這台裝置（共用電腦請勿勾）</label>
-        <button id="gate-go">進入</button>
-        <div id="gate-err" class="gate-err"></div>
+        <button id="gate-go">打開旅行手冊 ↗</button>
+        <div id="gate-err" class="gate-err" role="alert"></div>
+        </div>
       </div>`;
     document.body.appendChild(wrap);
     const pw = document.getElementById("gate-pw");
     const err = document.getElementById("gate-err");
     const go = document.getElementById("gate-go");
     const submit = async () => {
+      if (go.disabled) return;
       err.textContent = "";
       go.disabled = true; go.textContent = "解鎖中…";
       const ok = await tryUnlock(pw.value.trim(), document.getElementById("gate-remember").checked, () => {
         err.textContent = "密碼不對，再試一次";
-        go.disabled = false; go.textContent = "進入";
+        go.disabled = false; go.textContent = "打開旅行手冊 ↗";
         pw.value = ""; pw.focus();
       });
     };
     go.addEventListener("click", submit);
     pw.addEventListener("keydown", e => { if (e.key === "Enter") submit(); });
-    setTimeout(() => pw.focus(), 50);
+
   }
 
   window.forgetDevice = function () {

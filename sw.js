@@ -1,4 +1,4 @@
-const CACHE = "thai-trip-v16";
+const CACHE = "thai-trip-v20";
 const CORE = [
   "./",
   "./index.html",
