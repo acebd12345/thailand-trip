@@ -40,7 +40,10 @@ const QI = {
   chat: SVG('<path d="M21 11.5a8.5 8.5 0 0 1-12.4 7.6L3 21l1.9-5.1A8.5 8.5 0 1 1 21 11.5z"/>'),
   bed: SVG('<path d="M3 7v11M3 12h18v6M21 18v-4a3 3 0 0 0-3-3h-7v4"/><circle cx="7" cy="10" r="1.5"/>'),
   pin: SVG('<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.4"/>'),
-  food: SVG('<path d="M6 2v6a2 2 0 0 0 4 0V2"/><path d="M8 10v12"/><path d="M17 2a5 5 0 0 0-2 4v5h3v11"/>')
+  food: SVG('<path d="M6 2v6a2 2 0 0 0 4 0V2"/><path d="M8 10v12"/><path d="M17 2a5 5 0 0 0-2 4v5h3v11"/>'),
+  toilet: SVG('<ellipse cx="12" cy="8.5" rx="6" ry="5"/><ellipse cx="12" cy="8.5" rx="2.3" ry="1.7"/><path d="M8.4 13 8 21M15.6 13 16 21M8 21h8"/>'),
+  tools: SVG('<path d="M14.6 6.4a3.8 3.8 0 0 1-5 5L4 17v3h3l5.6-5.6a3.8 3.8 0 0 0 5-5l-2.4 2.4-2-2z"/>'),
+  todo: SVG('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12l2.5 2.5L16 9"/>')
 };
 
 let toastTimer;
@@ -254,10 +257,18 @@ function renderPlan() {
     <div class="timeline">${events}</div>
     ${hotel ? `<div id="plan-stay">${hotelBlockHTML(hotel, { flat: true })}</div>` : ""}
     <div class="swipe-hint">← 左右滑動切換天數 →</div>
-    <button class="food-fab" onclick="openFood()" aria-haspopup="dialog" aria-controls="foodsheet">${QI.food}<span>附近美食</span></button>`;
+    <div class="toolmenu" id="toolmenu">
+      <div class="tm-options" id="tm-options" role="menu" aria-label="旅途工具" hidden>
+        <button class="tm-opt" role="menuitem" onclick="toolPick('food')">${QI.food}<span>附近美食</span></button>
+        <button class="tm-opt" role="menuitem" onclick="toolPick('toilet')">${QI.toilet}<span>附近廁所</span></button>
+        <button class="tm-opt" role="menuitem" onclick="toolPick('todo')">${QI.todo}<span>每日待辦</span></button>
+      </div>
+      <button class="food-fab tm-fab" id="tm-fab" onclick="toggleTools()" aria-haspopup="menu" aria-expanded="false" aria-controls="tm-options">${QI.tools}<span>旅途工具</span></button>
+    </div>`;
 
   const selPill = document.querySelectorAll(".daypill")[selDay];
   if (selPill) selPill.scrollIntoView({ inline: "center", block: "nearest" });
+  if (typeof closeTools === "function") closeTools();   // 重繪行程頁時工具選單回到收合態
 }
 window.selectDay = i => { selDay = i; renderPlan(); window.scrollTo({ top: 0 }); };
 
@@ -549,12 +560,75 @@ window.convThb = v => {
   $("#conv-out").textContent = n > 0 ? "≈ TWD " + Math.round(n * DATA.money.rate).toLocaleString() : "≈ TWD —";
 };
 
-/* ===== 吃飯 · 找最近推薦 ===== */
-let foodState = { center: null, centerIdx: null, city: "all", note: "" };
-let foodList = [];
-let foodOpener = null;
-let foodDay = null;
+/* ===== 旅途工具：共用面板控制器 =====
+   一次只開一個面板；開啟時背景 inert + 鎖捲動，返回鍵先關面板留在原分頁。 */
+let activePanel = null;   // "food" | "toilet" | "todo"
+let panelOpener = null;
 
+function openPanel(kind, render) {
+  if (activePanel === kind) { render(); return; }
+  if (activePanel) closePanelDom();
+  panelOpener = document.activeElement;
+  activePanel = kind;
+  const s = document.getElementById(kind + "sheet");
+  if (s) s.hidden = false;
+  document.getElementById("app").inert = true;
+  document.getElementById("tabbar").inert = true;
+  document.body.style.overflow = "hidden";
+  history.pushState({ panel: kind }, "");   // 讓手機返回鍵先關面板
+  render();
+}
+function closePanelDom() {
+  if (!activePanel) return;
+  const s = document.getElementById(activePanel + "sheet");
+  if (s) s.hidden = true;
+  activePanel = null;
+  document.body.style.overflow = "";
+  document.getElementById("app").inert = false;
+  document.getElementById("tabbar").inert = false;
+  if (panelOpener && panelOpener.isConnected) panelOpener.focus({ preventScroll: true });
+}
+// 由使用者操作（關閉鈕／背景／Esc）觸發：走 history.back → popstate → closePanelDom（單一收斂路徑）
+window.closePanel = function () {
+  if (!activePanel) return;
+  if (history.state && history.state.panel) history.back();
+  else closePanelDom();
+};
+
+/* ===== 旅途工具選單（收合鈕 + 展開選項） ===== */
+let toolsOpen = false;
+function openTools() {
+  const fab = document.getElementById("tm-fab"), opts = document.getElementById("tm-options");
+  if (!fab || !opts) return;
+  toolsOpen = true;
+  opts.hidden = false;
+  fab.setAttribute("aria-expanded", "true");
+  let scrim = document.getElementById("tm-scrim");
+  if (!scrim) {
+    scrim = document.createElement("div");
+    scrim.id = "tm-scrim";
+    scrim.addEventListener("click", closeTools);
+    document.body.appendChild(scrim);
+  }
+  scrim.hidden = false;
+}
+function closeTools() {
+  toolsOpen = false;
+  const fab = document.getElementById("tm-fab"), opts = document.getElementById("tm-options"), scrim = document.getElementById("tm-scrim");
+  if (opts) opts.hidden = true;
+  if (fab) fab.setAttribute("aria-expanded", "false");
+  if (scrim) scrim.hidden = true;
+}
+window.closeTools = closeTools;
+window.toggleTools = function () { toolsOpen ? closeTools() : openTools(); };
+window.toolPick = function (kind) {
+  closeTools();                       // 先收合選單，再開面板
+  if (kind === "food") openFood();
+  else if (kind === "toilet") openToilet();
+  else if (kind === "todo") openTodo();
+};
+
+/* ===== 距離工具（美食與廁所共用） ===== */
 function haversineM(lat1, lng1, lat2, lng2) {
   const R = 6371000, toR = d => d * Math.PI / 180;
   const dLat = toR(lat2 - lat1), dLng = toR(lng2 - lng1);
@@ -568,43 +642,40 @@ function fmtDist(m) {
 }
 const inThailand = (lat, lng) => lat > 5.5 && lat < 20.6 && lng > 97.2 && lng < 105.8;
 
-function defaultFoodCenterIdx() {
+// 依目前選取日的城市決定預設參考中心（曼谷日→Wyndham(3)，其餘→清邁飯店(0)）
+function defaultCenterIdx() {
   const { date } = bkkNow();
   const day = $("#page-plan").classList.contains("active") ? DATA.days[selDay] : DATA.days.find(d => d.date === date);
-  return (day && day.cityClass === "bkk") ? 3 : 0; // 曼谷日→Wyndham，其餘→清邁飯店
+  return (day && day.cityClass === "bkk") ? 3 : 0;
 }
 
-window.openFood = function () {
+/* ===== 附近美食 ===== */
+let foodState = { center: null, centerIdx: null, city: "all", note: "" };
+let foodList = [];
+let foodDay = null;
+
+function ensureFoodSheet() {
   let sheet = document.getElementById("foodsheet");
-  if (!sheet) {
-    sheet = document.createElement("div");
-    sheet.id = "foodsheet";
-    document.body.appendChild(sheet);
-    sheet.addEventListener("click", e => {
-      const cp = e.target.closest("[data-copyaddr]");
-      if (cp) { copyText(foodList[+cp.dataset.copyaddr].addr, "地址已複製，貼到 Grab／Bolt 就能叫車"); return; }
-      if (e.target === sheet) closeFood();
-    });
-  }
-  foodOpener = document.activeElement;
-  sheet.hidden = false;
-  document.getElementById("app").inert = true;
-  document.getElementById("tabbar").inert = true;
-  document.body.style.overflow = "hidden";
+  if (sheet) return sheet;
+  sheet = document.createElement("div");
+  sheet.id = "foodsheet";
+  sheet.hidden = true;
+  document.body.appendChild(sheet);
+  sheet.addEventListener("click", e => {
+    const cp = e.target.closest("[data-copyaddr]");
+    if (cp) { copyText(foodList[+cp.dataset.copyaddr].addr, "地址已複製，貼到 Grab／Bolt 就能叫車"); return; }
+    if (e.target === sheet) closePanel();
+  });
+  return sheet;
+}
+window.openFood = function () {
+  ensureFoodSheet();
   const selectedDate = DATA.days[selDay].date;
   if (foodState.centerIdx === null || foodDay !== selectedDate) {
-    setFoodCenterIdx(defaultFoodCenterIdx(), true);
+    setFoodCenterIdx(defaultCenterIdx(), true);
     foodDay = selectedDate;
   }
-  renderFood();
-};
-window.closeFood = function () {
-  const s = document.getElementById("foodsheet");
-  if (s) s.hidden = true;
-  document.body.style.overflow = "";
-  document.getElementById("app").inert = false;
-  document.getElementById("tabbar").inert = false;
-  if (foodOpener && foodOpener.isConnected) foodOpener.focus({ preventScroll: true });
+  openPanel("food", renderFood);
 };
 function tryLocateFood() {
   if (!("geolocation" in navigator)) { foodState.note = "此裝置不支援定位，已切換為參考地點"; renderFood(); return; }
@@ -667,7 +738,7 @@ function renderFood() {
     <div class="fs-panel" role="dialog" aria-modal="true" aria-label="附近美食">
       <div class="fs-head">
         <div><span class="eyebrow">GOOD FOOD, GOOD MOOD</span><div class="fs-title">附近，有什麼好吃的？</div></div>
-        <button class="fs-close" onclick="closeFood()" aria-label="關閉">✕</button>
+        <button class="fs-close" onclick="closePanel()" aria-label="關閉">✕</button>
       </div>
       ${st.note ? `<div class="fs-note">${esc(st.note)}</div>` : ""}
       <div class="fs-center">距離基準：<b>${esc(c.label)}</b></div>
@@ -682,12 +753,215 @@ function renderFood() {
   const nextFocus = focused && [...sheet.querySelectorAll("button[onclick]")].find(el => el.getAttribute("onclick") === focused);
   (nextFocus || sheet.querySelector(".fs-close")).focus({ preventScroll: true });
 }
-document.addEventListener("keydown", e => {
-  const sheet = document.getElementById("foodsheet");
+
+/* ===== 附近廁所（互動完全比照美食） ===== */
+let toiletState = { center: null, centerIdx: null, city: "all", cat: "all", note: "" };
+let toiletList = [];
+let toiletDay = null;
+
+// 把 Sheet 的細分類別歸併成少數幾組，讓 chip 篩選好用；未知類別歸「其他」。
+const TOILET_GROUPS = [
+  ["寺廟古蹟", /寺|佛|古蹟/],
+  ["夜市市集", /夜市|市集|市場/],
+  ["商場百貨", /百貨|商場|賣場|超市|量販|購物/],
+  ["飯店大廳", /飯店|酒店|公寓|大廳/],
+  ["交通站", /捷運|地鐵|碼頭|機場|車站/],
+  ["餐廳咖啡", /餐廳|咖啡|速食|加油|超商/],
+  ["公園景點", /公園|文創|景觀|藝術/]
+];
+function toiletGroup(cat) {
+  cat = cat || "";
+  for (const [name, re] of TOILET_GROUPS) if (re.test(cat)) return name;
+  return "其他";
+}
+
+function ensureToiletSheet() {
+  let sheet = document.getElementById("toiletsheet");
+  if (sheet) return sheet;
+  sheet = document.createElement("div");
+  sheet.id = "toiletsheet";
+  sheet.hidden = true;
+  document.body.appendChild(sheet);
+  sheet.addEventListener("click", e => {
+    const cp = e.target.closest("[data-copyaddr]");
+    if (cp) { const t = toiletList[+cp.dataset.copyaddr]; if (t && t.addr) copyText(t.addr, "地址已複製，貼到 Grab／Bolt 就能叫車"); return; }
+    if (e.target === sheet) closePanel();
+  });
+  return sheet;
+}
+window.openToilet = function () {
+  ensureToiletSheet();
+  const selectedDate = DATA.days[selDay].date;
+  if (toiletState.centerIdx === null || toiletDay !== selectedDate) {
+    setToiletCenterIdx(defaultCenterIdx(), true);
+    toiletDay = selectedDate;
+  }
+  openPanel("toilet", renderToilet);
+};
+function tryLocateToilet() {
+  if (!("geolocation" in navigator)) { toiletState.note = "此裝置不支援定位，已切換為參考地點"; renderToilet(); return; }
+  toiletState.note = "定位中…（拒絕或逾時會自動用參考地點）";
+  renderToilet();
+  navigator.geolocation.getCurrentPosition(pos => {
+    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+    if (inThailand(lat, lng)) {
+      toiletState.center = { label: "目前位置", lat, lng };
+      toiletState.centerIdx = -2;
+      toiletState.city = lat > 16 ? "cm" : "bkk";
+      toiletState.cat = "all";
+      toiletState.note = "";
+    } else {
+      toiletState.note = "目前未定位於泰國，已為你切換為參考地點";
+    }
+    renderToilet();
+  }, () => {
+    toiletState.note = "未取得定位權限，已為你切換為參考地點";
+    renderToilet();
+  }, { enableHighAccuracy: false, timeout: 6000, maximumAge: 120000 });
+}
+window.relocateToilet = () => { tryLocateToilet(); };
+window.setToiletCenterIdx = (i, silent) => {
+  toiletState.centerIdx = i;
+  toiletState.center = DATA.foodCenters[i];
+  toiletState.city = DATA.foodCenters[i].city;
+  toiletState.cat = "all";
+  toiletState.note = "";
+  if (!silent) renderToilet();
+};
+window.setToiletCity = c => { toiletState.city = c; toiletState.cat = "all"; renderToilet(); };
+window.setToiletCat = g => { toiletState.cat = g; renderToilet(); };
+
+function renderToilet() {
+  const sheet = document.getElementById("toiletsheet");
   if (!sheet || sheet.hidden) return;
-  if (e.key === "Escape") { e.preventDefault(); closeFood(); return; }
+  const focused = sheet.contains(document.activeElement) ? document.activeElement.getAttribute("onclick") : null;
+  const st = toiletState, c = st.center;
+  const toilets = (DATA.toilets || []);
+
+  const cityList = toilets.filter(t => st.city === "all" || t.city === st.city);
+  // 類別 chip：只列出目前城市範圍內存在的組別，依固定優先序排列
+  const present = cityList.map(t => toiletGroup(t.cat));
+  const groups = [...TOILET_GROUPS.map(g => g[0]), "其他"].filter(g => present.includes(g));
+  if (!groups.includes(st.cat)) st.cat = "all";  // 城市切換後若原組別不存在則退回全部
+
+  toiletList = cityList
+    .filter(t => st.cat === "all" || toiletGroup(t.cat) === st.cat)
+    .map(t => Object.assign({}, t, { dist: haversineM(c.lat, c.lng, t.lat, t.lng) }))
+    .sort((a, b) => a.dist - b.dist);
+
+  const chips = [
+    `<button class="chip ${st.centerIdx === -2 ? "on" : ""}" onclick="relocateToilet()">${st.centerIdx === -2 ? "目前位置" : "用我的位置"}</button>`,
+    ...DATA.foodCenters.map((cc, i) => `<button class="chip ${st.centerIdx === i ? "on" : ""}" onclick="setToiletCenterIdx(${i})">${esc(cc.label)}</button>`)
+  ].join("");
+
+  const catChips = groups.length ? [
+    `<button class="chip ${st.cat === "all" ? "on" : ""}" onclick="setToiletCat('all')">全部類別</button>`,
+    ...groups.map(g => `<button class="chip ${st.cat === g ? "on" : ""}" onclick="setToiletCat('${g}')">${esc(g)}</button>`)
+  ].join("") : "";
+
+  const cards = toiletList.map((t, i) => {
+    const meta = [t.fee, t.hours].filter(Boolean).join(" · ");
+    const where = [t.area, t.addr].filter(Boolean).join(" · ");
+    return `
+    <div class="fcard">
+      <div class="fc-top"><span class="fc-name">${esc(t.name)}</span><span class="fc-dist">${fmtDist(t.dist)}</span></div>
+      <div class="fc-type"><span class="badge ${t.city}">${t.city === "cm" ? "清邁" : "曼谷"}</span> <span class="badge gold">${esc(t.cat || "公廁")}</span></div>
+      ${meta ? `<div class="fc-meta">${esc(meta)}</div>` : ""}
+      ${t.note ? `<div class="fc-dishes"><b>位置</b>${esc(t.note)}</div>` : ""}
+      ${where ? `<div class="fc-addr">${esc(where)}</div>` : ""}
+      <div class="btnrow">
+        <a class="abtn primary" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${t.lat},${t.lng}">Google Maps 導航</a>
+        ${t.addr ? `<button class="abtn" data-copyaddr="${i}">複製地址</button>` : ""}
+      </div>
+    </div>`;
+  }).join("");
+
+  sheet.innerHTML = `
+    <div class="fs-panel" role="dialog" aria-modal="true" aria-label="附近廁所">
+      <div class="fs-head">
+        <div><span class="eyebrow">WHEN YOU GOTTA GO</span><div class="fs-title">附近，哪裡有廁所？</div></div>
+        <button class="fs-close" onclick="closePanel()" aria-label="關閉">✕</button>
+      </div>
+      ${st.note ? `<div class="fs-note">${esc(st.note)}</div>` : ""}
+      <div class="fs-center">距離基準：<b>${esc(c.label)}</b></div>
+      <div class="fs-chips">${chips}</div>
+      <div class="seg fs-seg">
+        <button class="${st.city === "all" ? "sel" : ""}" onclick="setToiletCity('all')">全部 ${toilets.length}</button>
+        <button class="${st.city === "cm" ? "sel" : ""}" onclick="setToiletCity('cm')">清邁</button>
+        <button class="${st.city === "bkk" ? "sel" : ""}" onclick="setToiletCity('bkk')">曼谷</button>
+      </div>
+      ${catChips ? `<div class="fs-chips fs-catchips">${catChips}</div>` : ""}
+      <div class="fs-list">${cards || '<div class="card">這個範圍還沒整理廁所資料。</div>'}</div>
+    </div>`;
+  const nextFocus = focused && [...sheet.querySelectorAll("button[onclick]")].find(el => el.getAttribute("onclick") === focused);
+  (nextFocus || sheet.querySelector(".fs-close")).focus({ preventScroll: true });
+}
+
+/* ===== 每日待辦（Sheet 定義事項 + 各裝置 localStorage 勾選） ===== */
+let todoData = null;   // 來自 Sheet「待辦」分頁；未載入為 null
+function todoKey(dayLabel, it) { return "todo_" + dayLabel + "_" + (it.code || it.text); }
+
+function ensureTodoSheet() {
+  let sheet = document.getElementById("todosheet");
+  if (sheet) return sheet;
+  sheet = document.createElement("div");
+  sheet.id = "todosheet";
+  sheet.hidden = true;
+  document.body.appendChild(sheet);
+  sheet.addEventListener("click", e => {
+    const chk = e.target.closest("[data-todokey]");
+    if (chk) { const k = chk.getAttribute("data-todokey"); store.set(k, !store.get(k, false)); renderTodo(); return; }
+    if (e.target === sheet) closePanel();
+  });
+  return sheet;
+}
+window.openTodo = function () {
+  ensureTodoSheet();
+  openPanel("todo", renderTodo);
+};
+
+function renderTodo() {
+  const sheet = document.getElementById("todosheet");
+  if (!sheet || sheet.hidden) return;
+  const focusedKey = sheet.contains(document.activeElement) ? document.activeElement.getAttribute("data-todokey") : null;
+  const wasClose = sheet.contains(document.activeElement) && document.activeElement.classList.contains("fs-close");
+  const day = DATA.days[selDay];
+  const md = day.date.slice(5).replace("-", "/");
+  const items = (todoData || []).filter(t => t.day === day.label);
+  const done = items.filter(it => store.get(todoKey(day.label, it), false)).length;
+
+  const rows = items.map(it => {
+    const key = todoKey(day.label, it);
+    const v = store.get(key, false);
+    return `<button type="button" class="chk todo-chk ${v ? "done" : ""}" role="checkbox" aria-checked="${v}" data-todokey="${esc(key)}">
+      <span class="box" aria-hidden="true">${v ? "✓" : ""}</span>
+      <span class="txt">${esc(it.text)}${it.note ? `<small class="todo-note">${esc(it.note)}</small>` : ""}</span></button>`;
+  }).join("");
+
+  sheet.innerHTML = `
+    <div class="fs-panel" role="dialog" aria-modal="true" aria-label="每日待辦">
+      <div class="fs-head">
+        <div><span class="eyebrow">TODAY'S TO-DO</span><div class="fs-title">${esc(md)} 待辦</div></div>
+        <button class="fs-close" onclick="closePanel()" aria-label="關閉">✕</button>
+      </div>
+      ${items.length ? `<div class="fs-center prog-line td-prog"><span>已完成</span><span><b>${done}</b> / ${items.length}</span></div>` : ""}
+      <div class="fs-list td-list">${items.length ? rows : '<div class="card">這一天沒有待辦事項。</div>'}</div>
+    </div>`;
+  let nextFocus = null;
+  if (focusedKey) nextFocus = [...sheet.querySelectorAll("[data-todokey]")].find(el => el.getAttribute("data-todokey") === focusedKey);
+  if (!nextFocus && !wasClose) nextFocus = sheet.querySelector("[data-todokey]");
+  (nextFocus || sheet.querySelector(".fs-close")).focus({ preventScroll: true });
+}
+
+/* ===== 面板共同：焦點陷阱 + Esc；選單 Esc ===== */
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && toolsOpen && !activePanel) { e.preventDefault(); closeTools(); return; }
+  const sheet = activePanel ? document.getElementById(activePanel + "sheet") : null;
+  if (!sheet || sheet.hidden) return;
+  if (e.key === "Escape") { e.preventDefault(); closePanel(); return; }
   if (e.key !== "Tab") return;
   const items = [...sheet.querySelectorAll('button, a[href], input, [tabindex="0"]')].filter(el => !el.disabled);
+  if (!items.length) return;
   const first = items[0], last = items[items.length - 1];
   if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
@@ -704,6 +978,7 @@ const pageScroll = {};
 const pageDetails = {};
 function go(tab, arg, fromHistory = false) {
   if (!PAGES[tab]) tab = "home";
+  if (toolsOpen) closeTools();   // 切換分頁時收合旅途工具選單
   const oldPage = document.querySelector(".page.active");
   if (oldPage) {
     const oldTab = oldPage.id.slice(5);
@@ -732,8 +1007,8 @@ function go(tab, arg, fromHistory = false) {
 }
 window.go = go;
 window.addEventListener("popstate", () => {
-  const sheet = document.getElementById("foodsheet");
-  if (sheet && !sheet.hidden) closeFood();
+  if (activePanel) { closePanelDom(); return; }   // 返回鍵先關面板、留在原分頁
+  closeTools();
   go(location.hash.slice(1), undefined, true);
 });
 document.querySelectorAll("#tabbar .tab").forEach(t => t.addEventListener("click", () => go(t.dataset.tab)));
@@ -817,6 +1092,59 @@ function parseFoodSheet(text) {
   return out.length ? out : null;
 }
 
+// 解析「廁所」分頁（表頭：名稱/緯度/經度 必填，其餘選填；缺城市代碼以緯度推斷）
+function parseToiletSheet(text) {
+  const rows = parseCSV(text);
+  let hi = -1;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const cells = rows[r].map(c => c.trim());
+    if (cells.includes("名稱") && cells.includes("緯度")) { hi = r; break; }
+  }
+  if (hi < 0) return null; // 防呆：讀到的不是廁所表就放棄
+  const head = rows[hi].map(h => h.trim());
+  const find = names => { for (const n of names) { const i = head.indexOf(n); if (i >= 0) return i; } return -1; };
+  const ci = {
+    city: find(["城市代碼"]), name: find(["名稱"]), cat: find(["類別"]), area: find(["區域"]),
+    fee: find(["費用"]), hours: find(["營業/開放時間", "營業時間", "開放時間"]),
+    note: find(["特點與位置備註", "備註", "特點"]), lat: find(["緯度"]), lng: find(["經度"]), addr: find(["地址"])
+  };
+  const get = (row, i) => i >= 0 ? (row[i] || "").trim() : "";
+  const out = [];
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row) continue;
+    const name = get(row, ci.name);
+    const lat = parseFloat(row[ci.lat]), lng = parseFloat(row[ci.lng]);
+    if (!name || !isFinite(lat) || !isFinite(lng)) continue; // 跳過缺名稱或座標錯的列
+    let city = get(row, ci.city).toLowerCase();
+    if (city !== "cm" && city !== "bkk") city = lat > 16 ? "cm" : "bkk"; // 缺欄或缺值以緯度推斷
+    out.push({ city, name, cat: get(row, ci.cat), area: get(row, ci.area), fee: get(row, ci.fee), hours: get(row, ci.hours), note: get(row, ci.note), lat, lng, addr: get(row, ci.addr) });
+  }
+  return out.length ? out : null;
+}
+
+// 解析「待辦」分頁（表頭：Day/事項 必填；備註/代碼 選填）
+function parseTodoSheet(text) {
+  const rows = parseCSV(text);
+  let hi = -1;
+  for (let r = 0; r < Math.min(rows.length, 5); r++) {
+    const cells = rows[r].map(c => c.trim());
+    if (cells.includes("Day") && cells.includes("事項")) { hi = r; break; }
+  }
+  if (hi < 0) return null;
+  const head = rows[hi].map(h => h.trim());
+  const ci = { day: head.indexOf("Day"), text: head.indexOf("事項"), note: head.indexOf("備註"), code: head.indexOf("代碼") };
+  const valid = new Set(DATA.days.map(d => d.label));
+  const out = [];
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row) continue;
+    const day = (row[ci.day] || "").trim();
+    const text2 = (row[ci.text] || "").trim();
+    if (!day || !text2 || !valid.has(day)) continue; // 跳過缺 Day/事項 或 Day 不在 D1–D8 的列
+    out.push({ day, text: text2, note: ci.note >= 0 ? (row[ci.note] || "").trim() : "", code: ci.code >= 0 ? (row[ci.code] || "").trim() : "" });
+  }
+  return out.length ? out : null;
+}
+
 async function refreshFromSheet() {
   if (typeof SHEET_ID === "undefined" || !SHEET_ID) return;
   const tabUrl = name => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(name)}`;
@@ -850,8 +1178,36 @@ async function refreshFromSheet() {
       }
       return null;
     })());
+    // 廁所清單：讀多張候選分頁（「廁所」或按城市分表），合併去重後按城市覆蓋內建。
+    // 注意：gviz 對不存在的分頁會退回第一頁，所以合併時必須去重。
+    jobs.push((async () => {
+      const tabs = ["廁所", "清邁廁所", "曼谷廁所"];
+      const lists = await Promise.all(tabs.map(async name => {
+        try {
+          const res = await fetch(tabUrl(name), { cache: "no-store" });
+          if (res.ok) return parseToiletSheet(await res.text());
+        } catch (e) {}
+        return null;
+      }));
+      const seen = new Set(); const toilets = [];
+      lists.forEach(list => (list || []).forEach(t => {
+        const key = t.name + "|" + t.lat + "|" + t.lng;
+        if (!seen.has(key)) { seen.add(key); toilets.push(t); }
+      }));
+      return toilets.length ? { toilets } : null;
+    })());
+    // 每日待辦（主試算表的「待辦」分頁；不進加密包，靠 SW 快取離線）
+    jobs.push((async () => {
+      try {
+        const res = await fetch(tabUrl("待辦"), { cache: "no-store" });
+        if (res.ok) { const todos = parseTodoSheet(await res.text()); if (todos && todos.length) return { todos }; }
+      } catch (e) {}
+      return null;
+    })());
 
     const results = await Promise.all(jobs);
+    const todoRes = results.pop();
+    const toiletRes = results.pop();
     const foodRes = results.pop();
     let changed = false;
     results.forEach((res, i) => {
@@ -862,6 +1218,13 @@ async function refreshFromSheet() {
       if (res.title) { DATA.days[i].title = res.title; changed = true; }
     });
     if (foodRes && foodRes.food) { DATA.food = foodRes.food; changed = true; }
+    if (toiletRes && toiletRes.toilets && toiletRes.toilets.length) {
+      // 按城市覆蓋：Sheet 只提供某一城的資料時，另一城保留內建，不會被整包蓋掉
+      const sheetCities = new Set(toiletRes.toilets.map(t => t.city));
+      DATA.toilets = (DATA.toilets || []).filter(t => !sheetCities.has(t.city)).concat(toiletRes.toilets);
+      changed = true;
+    }
+    if (todoRes && todoRes.todos) { todoData = todoRes.todos; changed = true; }
     if (changed) {
       const active = document.querySelector(".page.active");
       if (active) {
@@ -875,8 +1238,10 @@ async function refreshFromSheet() {
           window.scrollTo({ top: y });
         }
       }
-      const fs = document.getElementById("foodsheet");
-      if (fs && !fs.hidden) renderFood();
+      // 面板開著就地重繪，不關閉、不跳動
+      if (activePanel === "food") renderFood();
+      else if (activePanel === "toilet") renderToilet();
+      else if (activePanel === "todo") renderTodo();
     }
   } catch (e) { /* 離線或未公開：靜默使用內建資料 */ }
 }

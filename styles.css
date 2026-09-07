@@ -447,12 +447,12 @@ button { font-family: var(--sans); }
 .exp-form input:focus { outline: 2px solid var(--gold); border-color: transparent; }
 
 /* ---------- 吃飯 · 找最近推薦 ---------- */
-#foodsheet {
+#foodsheet, #toiletsheet, #todosheet {
   position: fixed; inset: 0; z-index: 150;
   background: rgba(59, 47, 35, .35);
   display: flex; align-items: flex-end; justify-content: center;
 }
-#foodsheet[hidden] { display: none !important; }
+#foodsheet[hidden], #toiletsheet[hidden], #todosheet[hidden] { display: none !important; }
 .fs-panel {
   width: 100%; max-width: 560px; height: 92dvh;
   background: var(--paper); border-radius: 20px 20px 0 0;
@@ -661,7 +661,7 @@ a, button, input, .card { overflow-wrap: anywhere; }
 .conv { flex-wrap: wrap; }
 .conv input { flex-basis: 45%; }
 .exp-del { min-width: 44px; min-height: 44px; }
-#foodsheet { background: #092D2770; backdrop-filter: blur(5px); }
+#foodsheet, #toiletsheet, #todosheet { background: #092D2770; backdrop-filter: blur(5px); }
 .fs-panel { max-width: 520px; height: 93dvh; border-radius: 22px 22px 0 0; box-shadow: 0 -8px 40px #092D2720; }
 .fs-head { padding: 22px 20px 16px; gap: 8px; }
 .fs-head .eyebrow { color: var(--green); font-size: 11px; }
@@ -763,9 +763,21 @@ a, button, input, .card { overflow-wrap: anywhere; }
 .cover-copy h1 { font-size: 30px; margin: 6px 0 8px; }
 .travel-mast { padding-top: 16px; }
 
-/* Food belongs to the itinerary, above the persistent primary navigation. */
+/* 旅途工具選單：收合鈕在行程之上、常駐導覽之上（沿用原 food-fab 位置） */
 #page-plan { animation: none; padding-bottom: 64px; }
-.food-fab { position: fixed; z-index: 45; bottom: calc(94px + env(safe-area-inset-bottom)); right: max(20px, calc((100vw - 480px) / 2)); display: flex; align-items: center; gap: 9px; min-height: 48px; padding: 12px 18px; border: 1px solid #FFFFFF40; border-radius: 28px; background: var(--green); color: white; box-shadow: 0 4px 16px #163D3530; font-size: 14px; font-weight: 650; }
-.food-fab svg { width: 21px; height: 21px; }
-.fs-panel { position: relative; padding-top: 10px; }
-.fs-panel::before { content: ""; position: absolute; width: 36px; height: 4px; border-radius: 4px; top: 9px; left: calc(50% - 18px); background: #A3B6AA; }
+.toolmenu { position: fixed; z-index: 46; bottom: calc(94px + env(safe-area-inset-bottom)); right: max(20px, calc((100vw - 480px) / 2)); display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+.food-fab { display: inline-flex; align-items: center; gap: 9px; min-height: 48px; padding: 12px 18px; border: 1px solid #FFFFFF40; border-radius: 28px; background: var(--green); color: white; box-shadow: 0 4px 16px #163D3530; font-size: 14px; font-weight: 650; cursor: pointer; }
+.food-fab svg { width: 21px; height: 21px; flex: 0 0 auto; }
+.tm-options { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.tm-options[hidden] { display: none; }
+.tm-opt { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; padding: 10px 16px; border: 1px solid var(--line); border-radius: 24px; background: var(--card); color: var(--ink); font-size: 14.5px; font-weight: 600; box-shadow: 0 5px 16px #163D3524; cursor: pointer; animation: tmpop .16s ease both; }
+.tm-opt svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--green); }
+@keyframes tmpop { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+#tm-scrim { position: fixed; inset: 0; z-index: 44; background: transparent; }
+#tm-scrim[hidden] { display: none; }
+
+/* 廁所卡片費用/時間 meta、待辦事項備註、廁所類別 chip 第二列 */
+.fc-meta { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+.fs-catchips { padding-top: 2px; }
+.todo-chk .txt { display: flex; flex-direction: column; }
+.todo-note { font-size: 12.5px; color: var(--ink-faint); margin-top: 3px; font-weight: 400; line-height: 1.6; }
