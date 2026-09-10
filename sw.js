@@ -1,4 +1,4 @@
-const CACHE = "thai-trip-v21";
+const CACHE = "thai-trip-v22";
 const CORE = [
   "./",
   "./index.html",
@@ -52,6 +52,11 @@ self.addEventListener("fetch", e => {
         caches.open(CACHE).then(c => c.put(e.request, clone));
       }
       return res;
-    }).catch(() => caches.match(e.request, { ignoreSearch: true }))
+    }).catch(() => {
+      // 離線回退：跨網域請求（Google Sheet gviz 用 ?sheet=D1/D2/美食/廁所/待辦 區分同一路徑）
+      // 必須連查詢字串一起比對，否則會把別的分頁快取誤當本分頁；同網域核心檔無查詢字串，維持寬鬆比對。
+      const sameOrigin = new URL(e.request.url).origin === self.location.origin;
+      return caches.match(e.request, { ignoreSearch: sameOrigin });
+    })
   );
 });

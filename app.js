@@ -231,7 +231,7 @@ function renderPlan() {
         <div class="ev-card">
           <div class="ev-heading"><h3 class="ev-title">${esc(ev.title)}</h3>${ev.mapq ? `<a class="event-nav" target="_blank" rel="noopener" href="${mapUrl(ev.mapq)}" aria-label="導航至${esc(ev.title)}">導航 ↗</a>` : ""}</div>
           ${ev.warn ? `<div class="ev-warn">${esc(ev.warn)}</div>` : ""}
-          <details class="event-detail"${s === "now" ? " open" : ""}><summary>行程詳情</summary>
+          <details class="event-detail" open><summary>行程詳情</summary>
             <div class="ev-desc">${esc(ev.desc)}</div>
             ${ev.cost ? `<div class="ev-cost">費用 ${esc(ev.cost)}</div>` : ""}
             ${ev.mapq ? `<button class="copy-place" data-place="${esc(ev.mapq)}">複製地點</button>` : ""}
@@ -898,7 +898,8 @@ function renderToilet() {
 }
 
 /* ===== 每日待辦（Sheet 定義事項 + 各裝置 localStorage 勾選） ===== */
-let todoData = null;   // 來自 Sheet「待辦」分頁；未載入為 null
+let todoData = null;   // 來自 Sheet「待辦」分頁；未載入為 null、已載入為陣列（可能為空）
+let todoTried = false; // refreshFromSheet 是否已跑完至少一輪（用來區分「載入中」與「讀不到」）
 function todoKey(dayLabel, it) { return "todo_" + dayLabel + "_" + (it.code || it.text); }
 
 function ensureTodoSheet() {
@@ -927,8 +928,15 @@ function renderTodo() {
   const wasClose = sheet.contains(document.activeElement) && document.activeElement.classList.contains("fs-close");
   const day = DATA.days[selDay];
   const md = day.date.slice(5).replace("-", "/");
+  const loaded = todoData !== null;   // null = 尚未讀到；陣列 = 已載入（該日可能真的沒事項）
   const items = (todoData || []).filter(t => t.day === day.label);
   const done = items.filter(it => store.get(todoKey(day.label, it), false)).length;
+  // 空狀態依載入狀態給不同文案：載入中／讀不到／確實這天沒有事項
+  const emptyMsg = loaded
+    ? "這一天沒有待辦事項。"
+    : (todoTried
+      ? "還沒讀到待辦清單。請確認有網路連線，且主試算表已建立「待辦」分頁。"
+      : "正在載入待辦清單…");
 
   const rows = items.map(it => {
     const key = todoKey(day.label, it);
@@ -945,7 +953,7 @@ function renderTodo() {
         <button class="fs-close" onclick="closePanel()" aria-label="關閉">✕</button>
       </div>
       ${items.length ? `<div class="fs-center prog-line td-prog"><span>已完成</span><span><b>${done}</b> / ${items.length}</span></div>` : ""}
-      <div class="fs-list td-list">${items.length ? rows : '<div class="card">這一天沒有待辦事項。</div>'}</div>
+      <div class="fs-list td-list">${items.length ? rows : `<div class="card">${esc(emptyMsg)}</div>`}</div>
     </div>`;
   let nextFocus = null;
   if (focusedKey) nextFocus = [...sheet.querySelectorAll("[data-todokey]")].find(el => el.getAttribute("data-todokey") === focusedKey);
@@ -1142,7 +1150,7 @@ function parseTodoSheet(text) {
     if (!day || !text2 || !valid.has(day)) continue; // 跳過缺 Day/事項 或 Day 不在 D1–D8 的列
     out.push({ day, text: text2, note: ci.note >= 0 ? (row[ci.note] || "").trim() : "", code: ci.code >= 0 ? (row[ci.code] || "").trim() : "" });
   }
-  return out.length ? out : null;
+  return out; // 找到 Day/事項 表頭即視為「待辦」分頁；即使 0 列也回空陣列（代表已載入、只是沒事項）
 }
 
 async function refreshFromSheet() {
@@ -1198,14 +1206,18 @@ async function refreshFromSheet() {
     })());
     // 每日待辦（主試算表的「待辦」分頁；不進加密包，靠 SW 快取離線）
     jobs.push((async () => {
-      try {
-        const res = await fetch(tabUrl("待辦"), { cache: "no-store" });
-        if (res.ok) { const todos = parseTodoSheet(await res.text()); if (todos && todos.length) return { todos }; }
-      } catch (e) {}
+      // 候選分頁名依序嘗試（parseTodoSheet 回陣列＝找到 Day/事項 表頭；回 null＝不是待辦分頁或 gviz 退回第一頁）
+      for (const name of ["待辦", "待辦事項"]) {
+        try {
+          const res = await fetch(tabUrl(name), { cache: "no-store" });
+          if (res.ok) { const todos = parseTodoSheet(await res.text()); if (todos) return { todos }; }
+        } catch (e) {}
+      }
       return null;
     })());
 
     const results = await Promise.all(jobs);
+    todoTried = true;   // 已跑完一輪同步，待辦面板可從「載入中」切到實際狀態
     const todoRes = results.pop();
     const toiletRes = results.pop();
     const foodRes = results.pop();
@@ -1243,7 +1255,13 @@ async function refreshFromSheet() {
       else if (activePanel === "toilet") renderToilet();
       else if (activePanel === "todo") renderTodo();
     }
-  } catch (e) { /* 離線或未公開：靜默使用內建資料 */ }
+    // 待辦面板即使資料沒變，也要重繪以反映「載入中 → 讀不到／已載入」狀態
+    if (activePanel === "todo") renderTodo();
+  } catch (e) {
+    // 離線或未公開：靜默使用內建資料；仍標記已嘗試，讓待辦面板不卡在「載入中」
+    todoTried = true;
+    if (activePanel === "todo") renderTodo();
+  }
 }
 
 /* ===== init ===== */
